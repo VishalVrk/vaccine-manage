@@ -13,6 +13,7 @@ import ReminderSystem from "./components/ReminderSystem";
 import PatientDashboard from "./pages/PatientDashboard";
 import PrivateRoute from "./components/PrivateRoute";
 import RegisterPage from "./pages/RegisterPage";
+import LandingPage from "./pages/LandingPage";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -59,7 +60,8 @@ function App() {
         </div>
       ) : (
         <Routes>
-          <Route path="/" element={<LoginPage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" />} />
           <Route path="/register" element={<RegisterPage />} />
         </Routes>
