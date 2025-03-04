@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import QRCode from 'qrcode';
 import { collection, getDocs, addDoc, query, where, getDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 
@@ -10,8 +11,52 @@ const PatientDashboard = () => {
   const [myAppointments, setMyAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
+  const [selectedAppointmentQR, setSelectedAppointmentQR] = useState(null);
 
   const currentUser = auth.currentUser;
+
+  const dataURLtoBlob = (dataURL) => {
+    const parts = dataURL.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+
+    return new Blob([uInt8Array], { type: contentType });
+  };
+
+  // Function to generate QR code
+  const generateAppointmentQR = async (appointment) => {
+    try {
+      // Create a detailed appointment information string
+      const qrData = JSON.stringify({
+        appointmentId: appointment.id,
+        patientEmail: appointment.userEmail,
+        vaccine: appointment.vaccine?.name || 'Unknown',
+        date: appointment.slot?.date || 'Unknown',
+        time: `${appointment.slot?.startTime || 'Unknown'} - ${appointment.slot?.endTime || 'Unknown'}`,
+        status: appointment.status || 'Scheduled'
+      });
+
+      // Generate QR code as data URL
+      const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+        errorCorrectionLevel: 'H',
+        width: 300,
+        margin: 2
+      });
+
+      return qrCodeDataUrl;
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      return null;
+    }
+  };
+
+
 
   useEffect(() => {
     fetchVaccines();
@@ -37,6 +82,42 @@ const PatientDashboard = () => {
       console.error("Error fetching vaccines:", error);
       showMessage("Failed to load vaccines.", "error");
     }
+  };
+
+  const generateAppointmentBlob = (appointment) => {
+    return new Promise((resolve, reject) => {
+      // Create a canvas to draw the appointment details
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+
+      // White background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Set text styles
+      ctx.fillStyle = 'black';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+
+      // Draw appointment details
+      ctx.fillText('Vaccine Appointment', canvas.width / 2, 50);
+      ctx.font = '16px Arial';
+      ctx.fillText(`Vaccine: ${appointment.vaccine?.name || 'Unknown'}`, canvas.width / 2, 100);
+      ctx.fillText(`Date: ${appointment.slot?.date || 'Unknown'}`, canvas.width / 2, 130);
+      ctx.fillText(`Time: ${appointment.slot?.startTime || 'Unknown'}`, canvas.width / 2, 160);
+      ctx.fillText(`Patient: ${currentUser.email || 'Unknown'}`, canvas.width / 2, 190);
+
+      // Convert canvas to blob
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to create blob'));
+        }
+      }, 'image/png');
+    });
   };
 
   const fetchAvailableSlots = async () => {
@@ -169,7 +250,7 @@ const PatientDashboard = () => {
       }
       
       // Create appointment
-      await addDoc(collection(db, "appointments"), {
+      const appointmentRef = await addDoc(collection(db, "appointments"), {
         userId: currentUser.uid,
         userEmail: currentUser.email,
         slotId: slotId,
@@ -177,6 +258,61 @@ const PatientDashboard = () => {
         bookedAt: new Date().toISOString(),
         status: "scheduled"
       });
+      
+      // Generate QR code for the appointment
+      const appointmentDoc = await getDoc(appointmentRef);
+      const appointmentData = { 
+        id: appointmentRef.id, 
+        ...appointmentDoc.data() 
+      };
+      
+      // Fetch additional details (slot and vaccine information)
+      if (appointmentData.slotId) {
+        const slotRef = doc(db, "slots", appointmentData.slotId);
+        const slotSnap = await getDoc(slotRef);
+        if (slotSnap.exists()) {
+          appointmentData.slot = slotSnap.data();
+          
+          if (appointmentData.slot.vaccineId) {
+            const vaccineRef = doc(db, "vaccines", appointmentData.slot.vaccineId);
+            const vaccineSnap = await getDoc(vaccineRef);
+            if (vaccineSnap.exists()) {
+              appointmentData.vaccine = vaccineSnap.data();
+            }
+          }
+        }
+      }
+      
+      // Generate QR code
+      const qrData = JSON.stringify({
+        appointmentId: appointmentData.id,
+        patientEmail: appointmentData.userEmail,
+        vaccine: appointmentData.vaccine?.name || 'Unknown',
+        date: appointmentData.slot?.date || 'Unknown',
+        time: `${appointmentData.slot?.startTime || 'Unknown'} - ${appointmentData.slot?.endTime || 'Unknown'}`,
+        status: appointmentData.status || 'Scheduled'
+      });
+  
+      const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+        errorCorrectionLevel: 'H',
+        width: 300,
+        margin: 2
+      });
+      
+      // Convert QR code to blob
+      const qrCodeBlob = dataURLtoBlob(qrCodeDataUrl);
+      
+      // Convert blob to base64 for Firestore storage
+      const reader = new FileReader();
+      reader.readAsDataURL(qrCodeBlob);
+      reader.onloadend = async () => {
+        const base64data = reader.result;
+        
+        // Update appointment with QR code blob
+        await updateDoc(appointmentRef, {
+          qrCodeBlob: base64data
+        });
+      };
       
       // Update slot booking count
       await updateDoc(slotRef, {
@@ -228,6 +364,23 @@ const PatientDashboard = () => {
     }
   };
 
+  const viewAppointmentQR = async (appointment) => {
+    // If QR code is already stored in the appointment, use that
+    if (appointment.qrCodeBlob) {
+      setSelectedAppointmentQR(appointment.qrCodeBlob);
+      return;
+    }
+
+    // Otherwise, generate a new QR code
+    try {
+      const qrCodeDataUrl = await generateAppointmentQR(appointment);
+      setSelectedAppointmentQR(qrCodeDataUrl);
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      showMessage("Failed to generate QR code.", "error");
+    }
+  };
+
   const showMessage = (text, type) => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: "", type: "" }), 5000);
@@ -256,41 +409,50 @@ const PatientDashboard = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="py-2 px-4 text-left">Date</th>
-                  <th className="py-2 px-4 text-left">Time</th>
-                  <th className="py-2 px-4 text-left">Vaccine</th>
-                  <th className="py-2 px-4 text-left">Status</th>
-                  <th className="py-2 px-4 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myAppointments.map(appointment => (
-                  <tr key={appointment.id} className="border-t">
-                    <td className="py-2 px-4">{appointment.slot?.date || "Unknown"}</td>
-                    <td className="py-2 px-4">
-                      {appointment.slot ? `${appointment.slot.startTime} - ${appointment.slot.endTime}` : "Unknown"}
-                    </td>
-                    <td className="py-2 px-4">{appointment.vaccine?.name || "Unknown"}</td>
-                    <td className="py-2 px-4">
-                      <span className="px-2 py-1 rounded bg-green-100 text-green-800">
-                        {appointment.status || "Scheduled"}
-                      </span>
-                    </td>
-                    <td className="py-2 px-4">
-                      <button
-                        onClick={() => cancelAppointment(appointment.id, appointment.slotId)}
-                        className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                        disabled={isLoading}
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  <thead>
+    <tr className="bg-gray-100">
+      <th className="py-2 px-4 text-left">Date</th>
+      <th className="py-2 px-4 text-left">Time</th>
+      <th className="py-2 px-4 text-left">Vaccine</th>
+      <th className="py-2 px-4 text-left">QR Code</th>
+      <th className="py-2 px-4 text-left">Status</th>
+      <th className="py-2 px-4 text-left">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {myAppointments.map(appointment => (
+      <tr key={appointment.id} className="border-t">
+        <td className="py-2 px-4">{appointment.slot?.date || "Unknown"}</td>
+        <td className="py-2 px-4">
+          {appointment.slot ? `${appointment.slot.startTime} - ${appointment.slot.endTime}` : "Unknown"}
+        </td>
+        <td className="py-2 px-4">{appointment.vaccine?.name || "Unknown"}</td>
+        <td className="py-2 px-4">
+          <button
+            onClick={() => viewAppointmentQR(appointment)}
+            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+          >
+            View QR
+          </button>
+        </td>
+        <td className="py-2 px-4">
+          <span className="px-2 py-1 rounded bg-green-100 text-green-800">
+            {appointment.status || "Scheduled"}
+          </span>
+        </td>
+        <td className="py-2 px-4">
+          <button
+            onClick={() => cancelAppointment(appointment.id, appointment.slotId)}
+            className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+            disabled={isLoading}
+          >
+            Cancel
+          </button>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
           </div>
         )}
       </div>
@@ -367,6 +529,24 @@ const PatientDashboard = () => {
             })}
           </div>
         )}
+        {selectedAppointmentQR && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl text-center">
+            <h2 className="text-xl font-bold mb-4">Appointment QR Code</h2>
+            <img 
+              src={selectedAppointmentQR} 
+              alt="Appointment QR Code" 
+              className="mx-auto mb-4"
+            />
+            <button
+              onClick={() => setSelectedAppointmentQR(null)}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

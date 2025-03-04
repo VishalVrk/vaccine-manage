@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { collection,getDocs,query } from "firebase/firestore";
+import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../firebase";
-import { QRCodeCanvas } from "qrcode.react";
 import { sha256 } from "js-sha256";
 
 const VaccinationRecord = () => {
@@ -62,20 +61,6 @@ const VaccinationRecord = () => {
     setTimeout(() => setMessage({ text: "", type: "" }), 5000);
   };
 
-  const generateQR = (record) => {
-    return JSON.stringify({
-      recordId: record.id,
-      patientId: record.patientId || record.userId,
-      vaccineId: record.vaccineId,
-      email: record.userEmail,
-      batchNumber: record.batchNumber || "N/A",
-      administeredAt: record.administeredAt || record.bookedAt,
-      hash: record.recordHash,
-      verificationUrl: `https://yourvaccineapp.com/verify/${record.id}`,
-    });
-  };
-  
-
   const getVaccineName = (vaccineId) => {
     return vaccines[vaccineId] || "Unknown Vaccine";
   };
@@ -95,7 +80,7 @@ const VaccinationRecord = () => {
             <tr>
               <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient Email</th>
               <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vaccine</th>
-              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch Number</th>
+              <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Administered At</th>
               <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
             </tr>
@@ -105,10 +90,18 @@ const VaccinationRecord = () => {
               <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                 <td className="py-4 px-6 text-sm text-gray-900">{record.userEmail || "N/A"}</td>
                 <td className="py-4 px-6 text-sm text-gray-900">{getVaccineName(record.vaccineId)}</td>
-                <td className="py-4 px-6 text-sm text-gray-900">{record.batchNumber || "Unknown"}</td>
+                <td className="py-4 px-6 text-sm text-gray-900">{record.status || "Unknown"}</td>
                 <td className="py-4 px-6 text-sm text-gray-900">{record.administeredAt || record.bookedAt || "N/A"}</td>
                 <td className="py-4 px-6 text-sm">
-                  <QRCodeCanvas value={generateQR(record)} size={100} />
+                  {record.qrCodeBlob ? (
+                    <img 
+                      src={record.qrCodeBlob} 
+                      alt="QR Code" 
+                      className="w-24 h-24 object-contain"
+                    />
+                  ) : (
+                    <span className="text-gray-500">No QR Code</span>
+                  )}
                 </td>
               </tr>
             ))}

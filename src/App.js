@@ -14,6 +14,7 @@ import PatientDashboard from "./pages/PatientDashboard";
 import PrivateRoute from "./components/PrivateRoute";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
+import AppointmentScanner from "./pages/AppointmentScanner";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -64,6 +65,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/check-qr" element={<AppointmentScanner />} />
         </Routes>
       )}
     </Router>
