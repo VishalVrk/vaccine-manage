@@ -59,10 +59,10 @@ const AdminDashboard = () => {
     fetchData();
   }, []);
 
-  const updateRole = async (userId, newRole) => {
-    await updateDoc(doc(db, "users", userId), { role: newRole });
-    setUsers(users.map(user => (user.id === userId ? { ...user, role: newRole } : patient)));
-  };
+  // const updateRole = async (userId, newRole) => {
+  //   await updateDoc(doc(db, "users", userId), { role: newRole });
+  //   setUsers(users.map(user => (user.id === userId ? { ...user, role: newRole } : patient)));
+  // };
 
   const getTodaysAppointments = () => {
     const today = new Date().toISOString().split('T')[0];
