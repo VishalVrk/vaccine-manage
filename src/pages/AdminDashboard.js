@@ -61,7 +61,7 @@ const AdminDashboard = () => {
 
   const updateRole = async (userId, newRole) => {
     await updateDoc(doc(db, "users", userId), { role: newRole });
-    setUsers(users.map(user => (user.id === userId ? { ...user, role: newRole } : user)));
+    setUsers(users.map(user => (user.id === userId ? { ...user, role: newRole } : patient)));
   };
 
   const getTodaysAppointments = () => {
