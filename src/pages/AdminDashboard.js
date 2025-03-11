@@ -193,22 +193,6 @@ const AdminDashboard = () => {
           <td className="py-4 px-6 text-sm text-gray-900">{user.email}</td>
           <td className="py-4 px-6 text-sm text-gray-900">{user.role || "user"}</td>
           <td className="py-4 px-6 text-sm">
-            {user.role !== "admin" && (
-              <button 
-                onClick={() => updateRole(user.id, "admin")} 
-                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors"
-              >
-                Make Admin
-              </button>
-            )}
-            {user.role === "admin" && (
-              <button 
-                onClick={() => updateRole(user.id, "user")} 
-                className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition-colors"
-              >
-                Remove Admin
-              </button>
-            )}
           </td>
         </tr>
       ))}
